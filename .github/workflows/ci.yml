@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-push:
+    name: "Build and Push"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Generate Hash"
+        id: "generate_sha"
+        run: |
+          SHA=$(echo $GITHUB_SHA | head -c7)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Build docker image
+        run: docker build -t walkerkyle/nlw.service.passin:${{steps.generate_sha.outputs.sha}} .
+
+      - name: Log into the container registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{secrets.DOCKERHUB_USERNAME}}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push image
+        run: |
+          docker push walkerkyle/nlw.service.passin:${{steps.generate_sha.outputs.sha}}
+          docker tag walkerkyle/nlw.service.passin:${{steps.generate_sha.outputs.sha}} walkerkyle/nlw.service.passin:latest
+          docker push walkerkyle/nlw.service.passin:latest
+
+      - name: Update Image tag
+        uses: fjogeleit/yaml-update-action@main
+        with:
+          branch: master
+          valueFile: deploy/values.yaml
+          propertypath: "image.tag"
+          value: "${{steps.generate_sha.outputs.sha}}"
+          commitChange: true
+          message: "new: updated tag in values helm"
